@@ -4,7 +4,7 @@ test:
 	CGO_ENABLED=0 go test ./...
 
 play:
-	go run cmd/main.go
+	go run cmd/hello/main.go
 
 pre-build:
 	go mod tidy
