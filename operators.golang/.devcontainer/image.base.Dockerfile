@@ -2,37 +2,36 @@ ARG GO_VERSION=1.22.0
 
 ARG ALPINE_VERSION=3.19
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION}
+FROM --platform=amd64 golang:${GO_VERSION}-alpine${ALPINE_VERSION}
 
-LABEL maintainer="Renato Moitinho"
-
-RUN apk add -q --update --progress --no-cache \
+RUN apk add --update --no-cache bash doas \
     alpine-sdk \
-    git \
-    sudo \
     openssh-client \
-    zsh \
+    git \
+    ca-certificates \
     docker \
-    bash \
+    zsh \
     python3 \
     py3-pip \
-    tzdata \ca-certificates \
+    tzdata \ 
     && rm -rf /var/cache/apk/*
 
-RUN mkdir -p /root/.ssh
+RUN adduser -D developer --home /home/developer -G wheel \
+    && echo 'permit :wheel as root' > /etc/doas.d/doas.conf \
+    && echo 'permit nopass :wheel as root' >> /etc/doas.d/doas.conf \
+    && su developer \
+    && addgroup developer docker \
+    && chown developer:docker /var/run
 
-RUN go install golang.org/x/tools/gopls@latest
+USER developer
 
-RUN sh -c "$(wget -O- https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)" "" --unattended &> /dev/null
+ENV HOME /home/developer
 
-ENV ENV="/root/.ashrc" \
-    ZSH=/root/.oh-my-zsh \
-    EDITOR=vi \
-    LANG=en_US.UTF-8
+ENV GOPATH ${HOME}/go
 
-RUN printf 'ZSH_THEME="robbyrussell"\nENABLE_CORRECTION="false"\nplugins=(git copyfile extract colorize dotenv encode64 golang)\nsource $ZSH/oh-my-zsh.sh' > "/root/.zshrc"
+ENV PATH $PATH:$GOPATH/bin
 
-RUN echo "exec `which zsh`" > "/root/.ashrc"
+COPY ./.kind  ${HOME}/.kind
 
 # INSTALL AWS CLI
 RUN pip3 install awscli --break-system-packages --upgrade --user
@@ -40,35 +39,36 @@ RUN pip3 install awscli --break-system-packages --upgrade --user
 ENV PATH $PATH:/root/.local/bin
 
 # INSTALL KUBECTL
-RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.22.0/bin/linux/amd64/kubectl \
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
     && chmod +x ./kubectl \
-    && mv ./kubectl /usr/local/bin/kubectl
+    && doas mv ./kubectl /usr/local/bin/kubectl
 
 # OPERATOR SDK
-RUN OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/v1.33.0 \
+RUN OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/download/1.33.0 \
     && curl -LO ${OPERATOR_SDK_DL_URL}/operator-sdk_linux_amd64 \
     && chmod +x operator-sdk_linux_amd64 \
-    && mv operator-sdk_linux_amd64 /usr/local/bin/operator-sdk
+    && doas mv operator-sdk_linux_amd64 /usr/local/bin/operator-sdk
 
 # KUBEBUILDER
 RUN curl -L -o kubebuilder "https://go.kubebuilder.io/dl/latest/linux/amd64" \
-    && chmod +x kubebuilder && mv kubebuilder /usr/local/bin/
+    && chmod +x kubebuilder && doas mv kubebuilder /usr/local/bin/
+
+# INSTALL GOPLS
+RUN GOBIN=$GOPATH/bin/ go install golang.org/x/tools/gopls@latest
 
 # INSTALL KIND
-RUN go install sigs.k8s.io/kind@v0.22.0
+RUN GOBIN=$GOPATH/bin/ go install sigs.k8s.io/kind@v0.22.0
 
 # CONTROLLER GEN
-RUN go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+RUN GOBIN=$GOPATH/bin/ go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0
 
 # SETUP ENV TEST
-RUN go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+RUN GOBIN=$GOPATH/bin/ go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
 # GINKGO
-RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
+RUN GOBIN=$GOPATH/bin/ go install github.com/onsi/ginkgo/v2/ginkgo@v2.16.0
 
 # INSTALL KUSTOMIZE
-RUN GOBIN=$GOPATH/bin/ GO111MODULE=on go install sigs.k8s.io/kustomize/kustomize/v5@latest
+RUN GOBIN=$GOPATH/bin/ GO111MODULE=on go install sigs.k8s.io/kustomize/kustomize/v5@v5.3.0
 
-ENV PATH $PATH:$GOPATH/bin
-
-COPY ./.kind  /home/.kind
+USER root

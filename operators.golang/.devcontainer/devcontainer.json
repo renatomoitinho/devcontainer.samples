@@ -2,7 +2,7 @@
     "name": "Basic go operators",
     "image": "renatomoitinho/dev-container:go.operators",
     "forwardPorts": [],
-    "remoteUser": "root",
+    "remoteUser": "developer",
     "containerEnv": {},
     "remoteEnv": {},
     "runArgs": [
@@ -11,11 +11,11 @@
     ],
     "mounts": [
         // if you want to use your ssh keys to git
-        "source=${env:HOME}/.ssh,target=/root/.ssh,type=bind,consistency=cached",
+        "source=${env:HOME}/.ssh,target=/root/.ssh,readonly,type=bind,consistency=cached",
         // if you share your docker.sock
-        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,readonly,type=bind"
     ],
-    "postStartCommand": "sh /home/.kind/init.sh",
+    "postStartCommand": "cd ~/ && sh .kind/init.sh",
     "customizations": {
         "vscode": {
             "settings": {
@@ -25,7 +25,6 @@
                 "golang.go",
                 "ms-vscode.go",
                 "ms-vscode.makefile-tools",
-                "IBM.output-colorizer",
                 "EditorConfig.EditorConfig",
                 "ms-azuretools.vscode-docker"
             ]
